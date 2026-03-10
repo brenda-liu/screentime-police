@@ -1,0 +1,1104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>High-Stakes Screen Time — Prototype</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      height: 100%;
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', sans-serif;
+      background: #1C1C1E;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── Stage ── */
+    .stage {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 48px 24px;
+      gap: 24px;
+    }
+
+    .stage-label {
+      font-size: 11px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.3);
+      font-weight: 500;
+    }
+
+    /* ── iPhone shell ── */
+    .iphone {
+      width: 393px;
+      height: 852px;
+      background: #F2F2F7;
+      border-radius: 54px;
+      position: relative;
+      overflow: hidden;
+      box-shadow:
+        0 0 0 1px rgba(255,255,255,0.07),
+        0 0 0 10px #1C1C1E,
+        0 0 0 11.5px rgba(255,255,255,0.08),
+        0 40px 100px rgba(0,0,0,0.85);
+      flex-shrink: 0;
+    }
+
+    .dynamic-island {
+      position: absolute;
+      top: 13px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 122px;
+      height: 36px;
+      background: #000;
+      border-radius: 20px;
+      z-index: 30;
+    }
+
+    /* ── Status bar ── */
+    .status-bar {
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 59px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      padding: 0 28px 10px;
+      background: #F2F2F7;
+      z-index: 20;
+    }
+
+    .status-time {
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: -0.2px;
+      color: #000;
+    }
+
+    .status-icons { display: flex; align-items: center; gap: 7px; }
+
+    /* ── Flow wrapper (slides between panes) ── */
+    .flow-wrapper {
+      position: absolute;
+      top: 59px; left: 0; right: 0; bottom: 0;
+      overflow: hidden;
+    }
+
+    .flow {
+      display: flex;
+      width: 400%;
+      height: 100%;
+      transform: translateX(0);
+      transition: transform 0.36s cubic-bezier(0.4, 0, 0.2, 1);
+      will-change: transform;
+    }
+
+    .flow.at-1 { transform: translateX(-25%); }
+    .flow.at-2 { transform: translateX(-50%); }
+    .flow.at-3 { transform: translateX(-75%); }
+
+    /* ── Shared time hero layer (repositions from center to top, no fade) ── */
+    .time-hero-layer {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      pointer-events: none;
+      z-index: 10;
+    }
+    .time-hero-layer .time-hero {
+      position: absolute;
+      left: 0; right: 0;
+      top: 50%;
+      transform: translateY(-50%);
+      transition: top 0.45s cubic-bezier(0.32, 0.72, 0, 1),
+                  transform 0.45s cubic-bezier(0.32, 0.72, 0, 1);
+    }
+    .time-hero-layer.at-reflect .time-hero {
+      top: 44px;
+      transform: translateY(0);
+    }
+    .time-hero-layer.hidden {
+      opacity: 0;
+      pointer-events: none;
+      visibility: hidden;
+    }
+
+    /* ── Reflection screen: content animates up from bottom ── */
+    .reflection-content-wrap {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+    .reflection-content-wrap .reflection-content-inner {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      transition: transform 0.4s cubic-bezier(0.32, 0.72, 0, 1),
+                  opacity 0.35s ease-out;
+    }
+    .reflection-content-wrap.entering .reflection-content-inner {
+      transform: translateY(80px);
+      opacity: 0;
+    }
+    .reflection-content-wrap.entering.visible .reflection-content-inner {
+      transform: translateY(0);
+      opacity: 1;
+    }
+
+    .pane {
+      width: 25%;
+      height: 100%;
+      overflow-y: auto;
+      overflow-x: hidden;
+      background: #F2F2F7;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+    }
+    .pane::-webkit-scrollbar { display: none; }
+
+    /* ── iOS Nav bar (screens 2 & 3) ── */
+    .nav-bar {
+      height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      flex-shrink: 0;
+      border-bottom: 0.5px solid rgba(60,60,67,0.2);
+      background: #F2F2F7;
+    }
+
+    .nav-title {
+      font-size: 17px;
+      font-weight: 600;
+      color: #000;
+      letter-spacing: -0.2px;
+    }
+
+    .nav-back {
+      position: absolute;
+      left: 8px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      color: #007AFF;
+      font-size: 17px;
+      cursor: pointer;
+      padding: 8px 10px;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .nav-cancel {
+      position: absolute;
+      right: 16px;
+      color: #007AFF;
+      font-size: 17px;
+      cursor: pointer;
+      padding: 8px 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    /* ── Screen 1: Time Limit ── */
+    .s1-header {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 36px 24px 0;
+      gap: 6px;
+      flex-shrink: 0;
+      transition: transform 0.4s cubic-bezier(0.32, 0.72, 0, 1),
+                  opacity 0.35s ease-out;
+    }
+    .s1-header.header-exit {
+      transform: translateY(-80px);
+      opacity: 0;
+    }
+
+    .limit-title {
+      font-size: 28px;
+      font-weight: 700;
+      color: #000;
+      letter-spacing: -0.5px;
+    }
+
+    .limit-sub {
+      font-size: 15px;
+      color: #8E8E93;
+      text-align: center;
+      line-height: 1.4;
+    }
+
+    .s1-hero-wrap {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 0 24px;
+      min-height: 0;
+    }
+
+    .time-hero {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px 0 0;
+      gap: 6px;
+    }
+
+    .hero-label {
+      font-size: 12px;
+      font-weight: 500;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      color: #8E8E93;
+    }
+
+    .live-timer {
+      font-size: 80px;
+      font-weight: 700;
+      letter-spacing: -3px;
+      color: #000;
+      font-variant-numeric: tabular-nums;
+      line-height: 1;
+    }
+
+    .live-timer .unit {
+      font-size: 22px;
+      font-weight: 400;
+      color: #8E8E93;
+      letter-spacing: -0.3px;
+      margin-left: 4px;
+    }
+
+    .context-line {
+      font-size: 13px;
+      color: #8E8E93;
+      margin-top: 2px;
+      text-align: center;
+      min-height: 18px;
+    }
+
+    /* ── Shared button area ── */
+    .button-area {
+      padding: 20px 16px 44px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+
+    .btn {
+      width: 100%;
+      border: none;
+      border-radius: 14px;
+      padding: 0 16px;
+      height: 50px;
+      font-size: 17px;
+      font-family: inherit;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      -webkit-tap-highlight-color: transparent;
+      transition: opacity 0.12s;
+    }
+
+    .btn:active { opacity: 0.7; }
+
+    .btn-primary {
+      background: #fff;
+      color: #FF3B30;
+      font-weight: 400;
+    }
+
+    .btn-primary.locked {
+      color: #C7C7CC;
+      cursor: default;
+    }
+
+    .btn-primary.locked:active { opacity: 1; }
+
+    .btn-primary.disabled {
+      color: #C7C7CC;
+      cursor: default;
+    }
+
+    .btn-primary.disabled:active { opacity: 1; }
+
+    .countdown-pill {
+      position: absolute;
+      right: 14px;
+      background: #F2F2F7;
+      border-radius: 20px;
+      padding: 3px 10px;
+      font-size: 13px;
+      color: #8E8E93;
+      font-variant-numeric: tabular-nums;
+      transition: opacity 0.3s;
+    }
+
+    .btn-ghost {
+      background: none;
+      color: #007AFF;
+      font-weight: 400;
+    }
+
+    /* ── Screen 2: Reflection ── */
+    .s2-cost {
+      flex: 0 0 46%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 0 24px;
+    }
+
+    .s2-reflect {
+      flex: 1;
+      padding: 20px 16px 0;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .s2-prompt {
+      font-size: 22px;
+      font-weight: 700;
+      color: #000;
+      letter-spacing: -0.4px;
+      line-height: 1.2;
+    }
+
+    .s2-textarea-card {
+      background: #fff;
+      border-radius: 10px;
+      overflow: hidden;
+      flex: 1;
+      min-height: 100px;
+    }
+
+    .s2-textarea {
+      width: 100%;
+      height: 100%;
+      min-height: 140px;
+      border: none;
+      outline: none;
+      resize: none;
+      font-family: inherit;
+      font-size: 17px;
+      color: #000;
+      background: transparent;
+      padding: 14px 16px;
+      line-height: 1.5;
+    }
+
+    .s2-textarea::placeholder {
+      color: #C7C7CC;
+    }
+
+    /* ── Screen 3: Time Pick ── */
+    .s3-body {
+      padding: 24px 16px 0;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .s3-quote-card {
+      background: #fff;
+      border-radius: 10px;
+      padding: 14px 16px;
+      margin-bottom: 28px;
+    }
+
+    .s3-quote-label {
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      color: #8E8E93;
+      margin-bottom: 6px;
+    }
+
+    .s3-quote-text {
+      font-size: 15px;
+      color: #3C3C43;
+      line-height: 1.5;
+      font-style: italic;
+    }
+
+    .s3-heading {
+      font-size: 17px;
+      font-weight: 600;
+      color: #000;
+      margin-bottom: 8px;
+      padding: 0 4px;
+    }
+
+    .time-options {
+      background: #fff;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    .time-option {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      height: 52px;
+      border-bottom: 0.5px solid rgba(60,60,67,0.18);
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      transition: background 0.1s;
+    }
+
+    .time-option:last-child { border-bottom: none; }
+    .time-option:active { background: #F2F2F7; }
+
+    .time-option-label {
+      font-size: 17px;
+      color: #000;
+    }
+
+    .time-option-chevron {
+      color: #C7C7CC;
+      font-size: 18px;
+      line-height: 1;
+    }
+
+    /* ── Granted overlay ── */
+    .granted-overlay {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      position: absolute;
+      top: 59px; left: 0; right: 0; bottom: 0;
+      background: #F2F2F7;
+      padding: 40px 24px;
+      text-align: center;
+      gap: 12px;
+      z-index: 25;
+    }
+
+    .granted-overlay.visible { display: flex; }
+
+    .granted-icon {
+      width: 64px;
+      height: 64px;
+      background: #34C759;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 4px;
+    }
+
+    .granted-title {
+      font-size: 22px;
+      font-weight: 700;
+      color: #000;
+      letter-spacing: -0.3px;
+    }
+
+    .granted-sub {
+      font-size: 15px;
+      color: #8E8E93;
+      line-height: 1.6;
+    }
+
+    .granted-reflection {
+      background: #fff;
+      border-radius: 10px;
+      padding: 14px 18px;
+      width: 100%;
+      text-align: left;
+      margin-top: 8px;
+    }
+
+    .granted-reflection-label {
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      color: #8E8E93;
+      margin-bottom: 4px;
+    }
+
+    .granted-reflection-text {
+      font-size: 15px;
+      color: #3C3C43;
+      font-style: italic;
+      line-height: 1.5;
+    }
+
+    /* ── Screen 4: Review (Review v3) ── */
+    .s4-body {
+      padding: 20px 16px 0;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      align-items: stretch;
+    }
+
+    .s4-section-header {
+      font-size: 13px;
+      color: #6D6D72;
+      padding: 8px 16px 4px;
+    }
+
+    .s4-new-entry {
+      background: #fff;
+      border-radius: 10px;
+      padding: 14px 16px;
+      border-left: 3px solid #007AFF;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 24px;
+    }
+
+    .s4-entry-block {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      width: 100%;
+    }
+
+    .s4-entry-label {
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      color: #8E8E93;
+      margin-bottom: 4px;
+    }
+
+    .s4-entry-answer {
+      font-size: 16px;
+      color: #000;
+      font-style: italic;
+      line-height: 1.45;
+    }
+
+    .s4-log-header {
+      font-size: 13px;
+      color: #6D6D72;
+      padding: 8px 16px 4px;
+    }
+
+    .s4-log-card {
+      background: #fff;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    .s4-log-row {
+      padding: 12px 16px;
+      border-bottom: 0.5px solid rgba(60,60,67,0.18);
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .s4-log-row:last-child { border-bottom: none; }
+
+    .s4-log-row-time {
+      font-size: 12px;
+      color: #8E8E93;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .s4-log-row-reflection {
+      font-size: 16px;
+      color: #000;
+      font-style: italic;
+      line-height: 1.45;
+    }
+
+    .btn-blue {
+      background: #fff;
+      color: #007AFF;
+      font-weight: 400;
+    }
+
+    .btn-filled {
+      background: #007AFF;
+      color: #fff;
+      font-weight: 500;
+    }
+
+    .btn-muted {
+      background: none;
+      color: #8E8E93;
+      font-size: 15px;
+      font-weight: 400;
+    }
+
+    /* ── Reset button ── */
+    .reset-btn {
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 500;
+      color: rgba(255,255,255,0.6);
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 10px;
+      padding: 10px 20px;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      transition: color 0.15s, background 0.15s, border-color 0.15s;
+    }
+    .reset-btn:hover {
+      color: rgba(255,255,255,0.9);
+      background: rgba(255,255,255,0.12);
+      border-color: rgba(255,255,255,0.2);
+    }
+    .reset-btn:active { opacity: 0.8; }
+
+    /* ── Mobile full-screen ── */
+    @media (max-width: 430px) {
+      body { background: #F2F2F7; }
+      .stage { padding: 0; justify-content: flex-start; }
+      .stage-label { display: none; }
+      .iphone {
+        width: 100%; height: 100dvh;
+        border-radius: 0; box-shadow: none;
+      }
+      .dynamic-island { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="stage">
+  <div class="iphone">
+    <div class="dynamic-island"></div>
+
+    <!-- Status bar -->
+    <div class="status-bar">
+      <span class="status-time" id="clock">9:41</span>
+      <div class="status-icons">
+        <svg width="18" height="12" viewBox="0 0 18 12" fill="none">
+          <rect x="0" y="8" width="3" height="4" rx="0.5" fill="#000"/>
+          <rect x="5" y="5" width="3" height="7" rx="0.5" fill="#000"/>
+          <rect x="10" y="2" width="3" height="10" rx="0.5" fill="#000"/>
+          <rect x="15" y="0" width="3" height="12" rx="0.5" fill="#000"/>
+        </svg>
+        <svg width="16" height="12" viewBox="0 0 16 12" fill="none">
+          <path d="M8 9a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3z" fill="#000"/>
+          <path d="M3.5 6.2A6.5 6.5 0 0 1 8 4.5c1.7 0 3.3.7 4.5 1.7" stroke="#000" stroke-width="1.3" stroke-linecap="round" fill="none"/>
+          <path d="M1 3.5A10 10 0 0 1 8 1a10 10 0 0 1 7 2.5" stroke="#000" stroke-width="1.3" stroke-linecap="round" fill="none"/>
+        </svg>
+        <svg width="26" height="13" viewBox="0 0 26 13" fill="none">
+          <rect x="0.5" y="0.5" width="22" height="12" rx="3.5" stroke="#000" stroke-opacity="0.35"/>
+          <rect x="2" y="2" width="17" height="9" rx="2" fill="#000"/>
+          <path d="M23.5 4.5v4" stroke="#000" stroke-opacity="0.4" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+      </div>
+    </div>
+
+    <!-- Flow -->
+    <div class="flow-wrapper">
+      <!-- Shared time hero (repositions from center to top, no duplicate on Reflection) -->
+      <div class="time-hero-layer" id="timeHeroLayer">
+        <div class="time-hero">
+          <div class="hero-label">Time on Instagram today</div>
+          <div class="live-timer" id="liveTimer">1:04<span class="unit">h</span></div>
+          <div class="context-line" id="contextLine">Longer than your lunch break</div>
+        </div>
+      </div>
+      <div class="flow" id="flow">
+
+        <!-- ── Pane 0: Time Limit ── -->
+        <div class="pane">
+          <div class="s1-header" id="s1Header">
+            <div class="limit-title">Time Limit</div>
+            <p class="limit-sub">Your 1-hour limit has been reached.</p>
+          </div>
+          <div class="s1-hero-wrap" aria-hidden="true"></div>
+          <div class="button-area">
+            <button class="btn btn-primary locked" id="continueBtn" onclick="goToReflect()">
+              I want to continue on Instagram
+              <span class="countdown-pill" id="countdownPill">5s</span>
+            </button>
+            <button class="btn btn-ghost">Done for now</button>
+          </div>
+        </div>
+
+        <!-- ── Pane 1: Reflection ── -->
+        <div class="pane">
+          <div class="nav-bar">
+            <span class="nav-back" onclick="goTo(0)">
+              <svg width="10" height="17" viewBox="0 0 10 17" fill="none">
+                <path d="M9 1L1.5 8.5L9 16" stroke="#007AFF" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              Back
+            </span>
+            <span class="nav-title">Screen Time</span>
+            <span class="nav-cancel" onclick="goTo(0)">Cancel</span>
+          </div>
+          <!-- Top half: time hero appears via shared layer (no duplicate) -->
+          <div class="s2-cost" aria-hidden="true"></div>
+          <!-- Bottom half: reflection (animates up from bottom on enter) -->
+          <div class="reflection-content-wrap" id="reflectionContentWrap">
+            <div class="reflection-content-inner">
+              <div class="s2-reflect">
+                <div class="s2-prompt">What do you still need to do?</div>
+                <div class="s2-textarea-card">
+                  <textarea
+                    class="s2-textarea"
+                    id="reflectInput"
+                    placeholder="Write something before continuing…"
+                    oninput="onReflectInput()"
+                  ></textarea>
+                </div>
+              </div>
+              <div class="button-area">
+                <button class="btn btn-primary disabled" id="continueReflectBtn" onclick="goToTimePick()">
+                  Continue
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Pane 2: Time Pick ── -->
+        <div class="pane">
+          <div class="nav-bar">
+            <span class="nav-back" onclick="goTo(1)">
+              <svg width="10" height="17" viewBox="0 0 10 17" fill="none">
+                <path d="M9 1L1.5 8.5L9 16" stroke="#007AFF" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              Back
+            </span>
+            <span class="nav-title">Screen Time</span>
+            <span class="nav-cancel" onclick="goTo(0)">Cancel</span>
+          </div>
+          <div class="s3-body">
+            <div class="s3-quote-card">
+              <div class="s3-quote-label">You wrote</div>
+              <div class="s3-quote-text" id="quoteDisplay">—</div>
+            </div>
+            <div class="s3-heading">How much time do you need?</div>
+            <div class="time-options">
+              <div class="time-option" onclick="grantTime(15)">
+                <span class="time-option-label">15 minutes</span>
+                <span class="time-option-chevron">›</span>
+              </div>
+              <div class="time-option" onclick="grantTime(30)">
+                <span class="time-option-label">30 minutes</span>
+                <span class="time-option-chevron">›</span>
+              </div>
+              <div class="time-option" onclick="grantTime(60)">
+                <span class="time-option-label">1 hour</span>
+                <span class="time-option-chevron">›</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Pane 3: Review ── -->
+        <div class="pane">
+          <div class="nav-bar">
+            <span class="nav-back" onclick="goTo(2)">
+              <svg width="10" height="17" viewBox="0 0 10 17" fill="none">
+                <path d="M9 1L1.5 8.5L9 16" stroke="#007AFF" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              Back
+            </span>
+            <span class="nav-title">Screen Time</span>
+          </div>
+          <div class="s4-body">
+            <div class="s4-section-header">New override</div>
+            <div class="s4-new-entry">
+              <div class="s4-entry-block">
+                <div class="s4-entry-label">You said you needed to</div>
+                <div class="s4-entry-answer" id="s4EntryReflection">—</div>
+              </div>
+              <div class="s4-entry-block">
+                <div class="s4-entry-label">How much time you need</div>
+                <div class="s4-entry-answer" id="s4EntryTime">—</div>
+              </div>
+            </div>
+
+            <div class="s4-log-header">Previous overrides</div>
+            <div class="s4-log-card">
+              <div class="s4-log-row">
+                <div class="s4-log-row-time">10:14 AM · +15 min · Override #1</div>
+                <div class="s4-log-row-reflection">Looking for craft night inspo</div>
+              </div>
+              <div class="s4-log-row">
+                <div class="s4-log-row-time">11:02 AM · +15 min · Override #2</div>
+                <div class="s4-log-row-reflection">Need more craft ideas</div>
+              </div>
+              <div class="s4-log-row">
+                <div class="s4-log-row-time">1:22 PM · +15 min · Override #3</div>
+                <div class="s4-log-row-reflection">Checking on F1 memes</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="button-area">
+            <button class="btn btn-filled" onclick="exitForToday()">I'm done for today</button>
+            <button class="btn btn-blue" id="addTimeBtn" onclick="confirmGrant()">Add 15 minutes anyway</button>
+          </div>
+        </div>
+
+      </div><!-- /flow -->
+    </div><!-- /flow-wrapper -->
+
+    <!-- ── Granted overlay ── -->
+    <div class="granted-overlay" id="grantedOverlay">
+      <div class="granted-icon">
+        <svg width="30" height="30" viewBox="0 0 30 30" fill="none">
+          <path d="M7 15l6 6 10-10" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <div class="granted-title" id="grantedTitle">15 minutes added</div>
+      <p class="granted-sub" id="grantedSub">Your limit will trigger again at 2:07 PM.</p>
+      <div class="granted-reflection">
+        <div class="granted-reflection-label">You said you needed to</div>
+        <div class="granted-reflection-text" id="grantedReflection">—</div>
+      </div>
+      <button class="btn btn-ghost" style="margin-top:8px" onclick="closeGranted()">Done</button>
+    </div>
+
+  </div><!-- /iphone -->
+  <button type="button" class="reset-btn" id="resetBtn" onclick="resetPrototype()">Reset prototype</button>
+  <div class="stage-label">Real Time Cost + Reflection Tax · Prototype · High-Stakes Screen Time</div>
+</div>
+
+<script>
+  // ── Clock ──
+  function updateClock() {
+    const now = new Date();
+    const h = now.getHours();
+    const m = String(now.getMinutes()).padStart(2, '0');
+    document.getElementById('clock').textContent = `${h}:${m}`;
+  }
+  updateClock();
+  setInterval(updateClock, 15000);
+
+  // ── Live timer ──
+  const initialTotalSec = 3600 + 4 * 60 + 23;
+  let totalSec = initialTotalSec;
+
+  const contextLines = [
+    [60,  "More than an hour of your day"],
+    [75,  "Longer than most meetings"],
+    [90,  "That's a feature-length film"],
+    [120, "Two hours. Just on this."],
+  ];
+
+  function getContext(minutes) {
+    for (let i = contextLines.length - 1; i >= 0; i--) {
+      if (minutes >= contextLines[i][0]) return contextLines[i][1];
+    }
+    return "Longer than your lunch break";
+  }
+
+  function formatTimer(s) {
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    return h > 0
+      ? `${h}:${String(m).padStart(2,'0')}`
+      : `${m}`;
+  }
+
+  function timerUnit(s) {
+    return Math.floor(s / 3600) > 0 ? 'h' : 'm';
+  }
+
+  function updateTimer() {
+    totalSec++;
+    const h = Math.floor(totalSec / 3600);
+    const m = Math.floor((totalSec % 3600) / 60);
+    const unit = timerUnit(totalSec);
+
+    const timerHTML = `${formatTimer(totalSec)}<span class="unit">${unit}</span>`;
+    const contextText = getContext(Math.floor(totalSec / 60));
+    document.getElementById('liveTimer').innerHTML = timerHTML;
+    document.getElementById('contextLine').textContent = contextText;
+  }
+
+  setInterval(updateTimer, 1000);
+
+  // ── Unlock countdown ──
+  let countdown = 5;
+  let unlockTimer = null;
+  const continueBtn = document.getElementById('continueBtn');
+  const pill = document.getElementById('countdownPill');
+
+  function startUnlockCountdown() {
+    if (unlockTimer) clearInterval(unlockTimer);
+    countdown = 5;
+    continueBtn.classList.add('locked');
+    pill.style.display = '';
+    pill.style.opacity = '1';
+    pill.textContent = countdown + 's';
+    unlockTimer = setInterval(() => {
+      countdown--;
+      if (countdown <= 0) {
+        clearInterval(unlockTimer);
+        unlockTimer = null;
+        continueBtn.classList.remove('locked');
+        pill.style.opacity = '0';
+        setTimeout(() => pill.style.display = 'none', 300);
+      } else {
+        pill.textContent = countdown + 's';
+      }
+    }, 1000);
+  }
+  startUnlockCountdown();
+
+  // ── Navigation ──
+  let currentPane = 0;
+
+  function goTo(pane) {
+    currentPane = pane;
+    const flow = document.getElementById('flow');
+    flow.className = 'flow' + (pane > 0 ? ` at-${pane}` : '');
+    const timeHeroLayer = document.getElementById('timeHeroLayer');
+    const s1Header = document.getElementById('s1Header');
+    const reflectionWrap = document.getElementById('reflectionContentWrap');
+    if (pane === 0) {
+      if (timeHeroLayer) timeHeroLayer.classList.remove('at-reflect');
+      if (s1Header) s1Header.classList.remove('header-exit');
+      if (reflectionWrap) reflectionWrap.classList.remove('entering', 'visible');
+      document.getElementById('reflectInput').value = '';
+      document.getElementById('continueReflectBtn').classList.add('disabled');
+    }
+    if (timeHeroLayer) {
+      if (pane >= 2) timeHeroLayer.classList.add('hidden');
+      else timeHeroLayer.classList.remove('hidden');
+    }
+  }
+
+  function goToReflect() {
+    if (continueBtn.classList.contains('locked')) return;
+    const s1Header = document.getElementById('s1Header');
+    const timeHeroLayer = document.getElementById('timeHeroLayer');
+    const reflectionWrap = document.getElementById('reflectionContentWrap');
+    s1Header.classList.add('header-exit');
+    timeHeroLayer.classList.add('at-reflect');
+    setTimeout(() => {
+      reflectionWrap.classList.add('entering');
+      goTo(1);
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          reflectionWrap.classList.add('visible');
+        });
+      });
+      setTimeout(() => document.getElementById('reflectInput').focus(), 420);
+    }, 450);
+  }
+
+  function onReflectInput() {
+    const val = document.getElementById('reflectInput').value.trim();
+    const btn = document.getElementById('continueReflectBtn');
+    if (val.length > 0) {
+      btn.classList.remove('disabled');
+    } else {
+      btn.classList.add('disabled');
+    }
+  }
+
+  function goToTimePick() {
+    const btn = document.getElementById('continueReflectBtn');
+    if (btn.classList.contains('disabled')) return;
+    const text = document.getElementById('reflectInput').value.trim();
+    document.getElementById('quoteDisplay').textContent = text;
+    document.getElementById('grantedReflection').textContent = text;
+    goTo(2);
+  }
+
+  // ── Grant time ──
+  let overrideCount = 3;
+  let pendingMinutes = 15;
+
+  function grantTime(minutes) {
+    pendingMinutes = minutes;
+    const label = minutes === 60 ? '1 hour' : `${minutes} minutes`;
+    const timeAnswer = minutes === 60 ? '1 hour' : minutes === 30 ? '30 min' : '15 min';
+
+    document.getElementById('s4EntryReflection').textContent =
+      document.getElementById('reflectInput').value.trim();
+    document.getElementById('s4EntryTime').textContent = timeAnswer;
+    document.getElementById('addTimeBtn').textContent =
+      `Add ${label} anyway`;
+
+    goTo(3);
+  }
+
+  function confirmGrant() {
+    overrideCount++;
+    const label = pendingMinutes === 60 ? '1 hour' : `${pendingMinutes} minutes`;
+    document.getElementById('grantedTitle').textContent = `${label} added`;
+
+    const now = new Date();
+    const future = new Date(now.getTime() + pendingMinutes * 60000);
+    const fh = future.getHours();
+    const fm = String(future.getMinutes()).padStart(2, '0');
+    const ampm = fh >= 12 ? 'PM' : 'AM';
+    const fh12 = fh % 12 || 12;
+    document.getElementById('grantedSub').textContent =
+      `Your limit will trigger again at ${fh12}:${fm} ${ampm}.`;
+    document.getElementById('grantedReflection').textContent =
+      document.getElementById('reflectInput').value.trim();
+
+    document.getElementById('grantedOverlay').classList.add('visible');
+  }
+
+  function exitForToday() {
+    goTo(0);
+  }
+
+  function closeGranted() {
+    document.getElementById('grantedOverlay').classList.remove('visible');
+    goTo(0);
+  }
+
+  // ── Reset prototype ──
+  function resetPrototype() {
+    currentPane = 0;
+    const flow = document.getElementById('flow');
+    flow.className = 'flow';
+    const timeHeroLayer = document.getElementById('timeHeroLayer');
+    const s1Header = document.getElementById('s1Header');
+    if (timeHeroLayer) {
+      timeHeroLayer.classList.remove('at-reflect', 'hidden');
+    }
+    if (s1Header) s1Header.classList.remove('header-exit');
+    const reflectionWrap = document.getElementById('reflectionContentWrap');
+    if (reflectionWrap) reflectionWrap.classList.remove('entering', 'visible');
+    document.getElementById('reflectInput').value = '';
+    document.getElementById('continueReflectBtn').classList.add('disabled');
+    document.getElementById('grantedOverlay').classList.remove('visible');
+    document.getElementById('quoteDisplay').textContent = '—';
+    document.getElementById('grantedReflection').textContent = '—';
+    document.getElementById('s4EntryReflection').textContent = '—';
+    document.getElementById('s4EntryTime').textContent = '—';
+    document.getElementById('addTimeBtn').textContent = 'Add 15 minutes anyway';
+    overrideCount = 3;
+    pendingMinutes = 15;
+    totalSec = initialTotalSec;
+    updateTimer();
+    startUnlockCountdown();
+  }
+</script>
+</body>
+</html>
